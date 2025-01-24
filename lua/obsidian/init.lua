@@ -103,9 +103,10 @@ obsidian.setup = function(opts)
   if opts.completion.nvim_cmp then
     local cmp = require "cmp"
 
-    cmp.register_source("obsidian", require("cmp_obsidian").new())
-    cmp.register_source("obsidian_new", require("cmp_obsidian_new").new())
-    cmp.register_source("obsidian_tags", require("cmp_obsidian_tags").new())
+    cmp.register_source("obsidian", require("obsidian.completion.sources.nvim_cmp.cmp_obsidian").new())
+    cmp.register_source("obsidian_new", require("obsidian.completion.sources.nvim_cmp.cmp_obsidian_new").new())
+    cmp.register_source("obsidian_tags", require("obsidian.completion.sources.nvim_cmp.cmp_obsidian_tags").new())
+  end
   end
 
   local group = vim.api.nvim_create_augroup("obsidian_setup", { clear = true })

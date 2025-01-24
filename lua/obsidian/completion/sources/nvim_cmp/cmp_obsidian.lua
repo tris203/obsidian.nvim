@@ -31,6 +31,7 @@ source.complete = function(_, request, callback)
     return
   end
 
+  -- Different from cmp_obsidian_new
   local in_buffer_only = false
 
   ---@type string|?

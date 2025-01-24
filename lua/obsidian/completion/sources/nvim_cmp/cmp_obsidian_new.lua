@@ -3,6 +3,8 @@ local completion = require "obsidian.completion.refs"
 local obsidian = require "obsidian"
 local util = require "obsidian.util"
 local LinkStyle = require("obsidian.config").LinkStyle
+local Note = require "obsidian.note"
+local Path = require "obsidian.path"
 
 ---@class cmp_obsidian_new.Source : obsidian.ABC
 local source = abc.new_class()
@@ -15,10 +17,14 @@ source.get_trigger_characters = completion.get_trigger_characters
 
 source.get_keyword_pattern = completion.get_keyword_pattern
 
-source.complete = function(_, request, callback)
+---Invoke completion (required).
+---@param params cmp.SourceCompletionApiParams
+---@param callback fun(response: lsp.CompletionResponse|nil)
+source.complete = function(_, params, callback)
   local client = assert(obsidian.get_client())
-  local can_complete, search, insert_start, insert_end, ref_type = completion.can_complete(request)
+  local can_complete, search, insert_start, insert_end, ref_type = completion.can_complete(params)
 
+  -- Different from cmp_obsidian
   if search ~= nil then
     search = util.lstrip_whitespace(search)
   end
@@ -124,11 +130,11 @@ source.complete = function(_, request, callback)
         newText = new_text,
         range = {
           start = {
-            line = request.context.cursor.row - 1,
+            line = params.context.cursor.row - 1,
             character = insert_start,
           },
           ["end"] = {
-            line = request.context.cursor.row - 1,
+            line = params.context.cursor.row - 1,
             character = insert_end,
           },
         },
@@ -146,12 +152,17 @@ source.complete = function(_, request, callback)
   }
 end
 
-source.execute = function(_, item, callback)
-  local Note = require "obsidian.note"
-  local Path = require "obsidian.path"
-
+---Creates a new note using the default template for the completion item.
+---Executed after the item was selected.
+---@param completion_item lsp.CompletionItem
+---@param callback fun(completion_item: lsp.CompletionItem|nil)
+source.execute = function(_, completion_item, callback)
   local client = assert(obsidian.get_client())
-  local data = item.data
+  local data = completion_item.data
+
+  if data == nil then
+    return callback(nil)
+  end
 
   -- Make sure `data.note` is actually an `obsidian.Note` object. If it gets serialized at some
   -- point (seems to happen on Linux), it will lose its metatable.
