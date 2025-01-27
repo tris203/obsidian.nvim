@@ -280,6 +280,7 @@ config.LinkStyle = {
 ---@class obsidian.config.CompletionOpts
 ---
 ---@field nvim_cmp boolean
+---@field blink boolean
 ---@field min_chars integer
 config.CompletionOpts = {}
 
