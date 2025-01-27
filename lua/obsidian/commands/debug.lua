@@ -32,8 +32,8 @@ end
 
 ---@return { available: boolean, refs: boolean|?, tags: boolean|?, new: boolean|?, sources: string[]|? }
 local function check_completion_with_blink()
-  local ok, blink_sources_lib = pcall(require, "blink.cmp.sources.lib")
-  if not ok then
+  local require_ok, blink_sources_lib = pcall(require, "blink.cmp.sources.lib")
+  if not require_ok then
     return { available = false }
   end
 
@@ -42,8 +42,8 @@ local function check_completion_with_blink()
   local cmp_new = pcall(blink_sources_lib.get_provider_by_id, "obsidian_new")
 
   local sources = {}
-  local ok, providers = pcall(blink_sources_lib.get_all_providers)
-  if ok then
+  local get_providers_ok, providers = pcall(blink_sources_lib.get_all_providers)
+  if get_providers_ok then
     vim.tbl_map(function(provider)
       table.insert(sources, provider.name)
     end, providers)
