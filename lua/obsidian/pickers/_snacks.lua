@@ -1,72 +1,29 @@
 local snacks_picker = require "snacks.picker"
-local snacks = require "snacks"
-
 
 local Path = require "obsidian.path"
 local abc = require "obsidian.abc"
 local Picker = require "obsidian.pickers.picker"
 
-
-function print_table(t, indent)
-    indent = indent or 0
-    local padding = string.rep("  ", indent)
-
-    for key, value in pairs(t) do
-        if type(value) == "table" then
-            print(padding .. tostring(key) .. " = {")
-            print_table(value, indent + 1)
-            print(padding .. "}")
-        else
-            print(padding .. tostring(key) .. " = " .. tostring(value))
-        end
-    end
+local function debug_once(msg, ...)
+--    vim.notify(msg .. vim.inspect(...))
 end
 
-function table_to_string(t, indent)
-    if type(t) ~= "table" then return tostring(t) end
-
-    indent = indent or 0
-    local padding = string.rep("  ", indent)
-    local parts = {}
-
-    for k, v in pairs(t) do
-        local key = type(k) == "number" and "[" .. k .. "]" or k
-        local value
-        if type(v) == "table" then
-            value = "{\n" .. table_to_string(v, indent + 1) .. padding .. "}"
-        elseif type(v) == "string" then
-            value = string.format("%q", v)
-        else
-            value = tostring(v)
-        end
-        parts[#parts + 1] = padding .. key .. " = " .. value
-    end
-
-    return table.concat(parts, ",\n") .. "\n"
-end
-
----@param entry string
----@return string
-local function clean_path(entry)
-    if type(entry) == "string" then
-        local path_end = assert(string.find(entry, ":", 1, true))
-        return string.sub(entry, 1, path_end - 1)
-    end
-    vim.notify("entry: " .. table.concat(vim.tbl_keys(entry), ", "))
-    return ""
-end
-
-local function map_actions(action)
-    if type(action) == "table" then
+---@param mapping table
+---@return table
+local function notes_mappings(mapping)
+    if type(mapping) == "table" then
         opts = { win = { input = { keys = {} } }, actions = {} };
-        for k, v in pairs(action) do
+        for k, v in pairs(mapping) do
             local name = string.gsub(v.desc, " ", "_")
             opts.win.input.keys = {
                 [k] = { name, mode = { "n", "i" }, desc = v.desc }
             }
             opts.actions[name] = function(picker, item)
-                vim.notify("action item: " .. table_to_string(item))
-                v.callback({args: item.text})
+                debug_once("mappings :", item)
+                picker:close()
+                vim.schedule(function()
+                    v.callback(item.value or item._path)
+                end)
             end
         end
         return opts
@@ -82,46 +39,60 @@ local SnacksPicker = abc.new_class({
     end,
 }, Picker)
 
+---@param opts obsidian.PickerFindOpts|? Options.
 SnacksPicker.find_files = function(self, opts)
     opts = opts or {}
 
     ---@type obsidian.Path
-    local dir = opts.dir and Path:new(opts.dir) or self.client.dir
+    local dir = opts.dir.filename and Path:new(opts.dir.filename) or self.client.dir
+
+    local map = vim.tbl_deep_extend("force", {},
+        notes_mappings(opts.selection_mappings))
 
     local pick_opts = vim.tbl_extend("force", map or {}, {
         source = "files",
         title = opts.prompt_title,
-        cwd = opts.dir.filename,
+        cwd = tostring(dir),
         confirm = function(picker, item, action)
             picker:close()
             if item then
                 if opts.callback then
+                    debug_once("find files callback: ", item)
                     opts.callback(item._path)
                 else
+                    debug_once("find files jump: ", item)
                     snacks_picker.actions.jump(picker, item, action)
                 end
             end
         end,
     })
-    snacks_picker.pick(pick_opts)
+    local t = snacks_picker.pick(pick_opts)
 end
 
-SnacksPicker.grep = function(self, opts, action)
+---@param opts obsidian.PickerGrepOpts|? Options.
+SnacksPicker.grep = function(self, opts)
     opts = opts or {}
+
+    debug_once("grep opts : ", opts)
 
     ---@type obsidian.Path
     local dir = opts.dir and Path:new(opts.dir) or self.client.dir
 
+    local map = vim.tbl_deep_extend("force", {},
+        notes_mappings(opts.selection_mappings))
+
     local pick_opts = vim.tbl_extend("force", map or {}, {
         source = "grep",
         title = opts.prompt_title,
-        cwd = opts.dir.filename,
+        cwd = dir,
         confirm = function(picker, item, action)
             picker:close()
             if item then
                 if opts.callback then
-                    opts.callback(item._path)
+                    debug_once("grep callback: ", item)
+                    opts.callback(item._path or item.filename)
                 else
+                    debug_once("grep jump: ", item)
                     snacks_picker.actions.jump(picker, item, action)
                 end
             end
@@ -130,16 +101,17 @@ SnacksPicker.grep = function(self, opts, action)
     snacks_picker.pick(pick_opts)
 end
 
+---@param values string[]|obsidian.PickerEntry[]
+---@param opts obsidian.PickerPickOpts|? Options.
+---@diagnostic disable-next-line: unused-local
 SnacksPicker.pick = function(self, values, opts)
     self.calling_bufnr = vim.api.nvim_get_current_buf()
 
     opts = opts or {}
 
-    local buf = opts.buf or vim.api.nvim_get_current_buf()
+    debug_once("pick opts: ", opts)
 
-    -- local map = vim.tbl_deep_extend("force", {},
-    --     map_actions(opts.selection_mappings),
-    --     map_actions(opts.query_mappings))
+    local buf = opts.buf or vim.api.nvim_get_current_buf()
 
     local entries = {}
     for _, value in ipairs(values) do
@@ -155,10 +127,13 @@ SnacksPicker.pick = function(self, values, opts)
                 buf = buf,
                 filename = value.filename,
                 value = value.value,
-                pos = { value.lnum, value.col },
+                pos = { value.lnum, value.col or 0 },
             })
         end
     end
+
+    local map = vim.tbl_deep_extend("force", {},
+        notes_mappings(opts.selection_mappings))
 
     local pick_opts = vim.tbl_extend("force", map or {}, {
         tilte = opts.prompt_title,
@@ -167,13 +142,15 @@ SnacksPicker.pick = function(self, values, opts)
             preview = false
         },
         format = "text",
-        confirm = function(picker, item)
+        confirm = function(picker, item, action)
             picker:close()
-            if item and opts.callback then
-                if type(item) == "string" then
-                    opts.callback(item)
-                else
+            if item then
+                if opts.callback then
+                    debug_once("pick callback: ", item)
                     opts.callback(item.value)
+                else
+                    debug_once("pick jump: ", item)
+                    snacks_picker.actions.jump(picker, item, action)
                 end
             end
         end,
